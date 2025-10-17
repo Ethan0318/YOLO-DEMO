@@ -4,7 +4,7 @@ from werkzeug.utils import secure_filename
 from ultralytics import YOLO
 import cv2
 import time    #time.time()函数可以记录程序运行到当前的时间
-
+import torch
 
 app = Flask(__name__)
 
@@ -15,6 +15,13 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # 确保上传目录存在
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# 解决PyTorch 2.6兼容性问题
+try:
+    from ultralytics.nn.tasks import DetectionModel
+    torch.serialization.add_safe_globals([DetectionModel])
+except:
+    pass
 
 # 加载 YOLO 模型
 model = YOLO("yolov8n.pt")  # 替换成你的模型路径
@@ -54,12 +61,24 @@ def index():
             #判断文件是图片还是视频，并进行不同的检测策略
             if filename.rsplit(".", 1)[1].lower() != "mp4":
 
-                # 对图片内容进行检测
-                results = model(filepath)
+                try:
+                    # 对图片内容进行检测
+                    results = model(filepath)
 
-                # 保存检测结果
-                output_path = os.path.join(app.config["UPLOAD_FOLDER"], f"detected_{filename}")
-                results[0].save(output_path)
+                    # 保存检测结果
+                    output_path = os.path.join(app.config["UPLOAD_FOLDER"], f"detected_{filename}")
+                    
+                    # 使用plot()方法获取带标注的图片，然后保存
+                    annotated_img = results[0].plot()
+                    success = cv2.imwrite(output_path, annotated_img)
+                    
+                    if not success:
+                        print(f"Failed to save image to {output_path}")
+                        return jsonify({"error": "Failed to save detection result"}), 500
+                        
+                except Exception as e:
+                    print(f"Error during image detection: {str(e)}")
+                    return jsonify({"error": f"Detection failed: {str(e)}"}), 500
 
 
             else:
