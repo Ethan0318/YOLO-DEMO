@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能视觉检测系统 - YOLOv8</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        .header {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            border-radius: 0 0 10px 10px;
+        }
+        .upload-container {
+            background: white;
+            border-radius: 10px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        .result-container {
+            display: none;
+            margin-top: 2rem;
+        }
+        .media-container {
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            background-color: white;
+        }
+        .media-title {
+            background-color: #f1f1f1;
+            padding: 0.75rem 1rem;
+            font-weight: bold;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .media-content {
+            padding: 1rem;
+        }
+        .comparison-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            justify-content: center;
+        }
+        .comparison-item {
+            flex: 1;
+            min-width: 300px;
+        }
+        .loading-spinner {
+            display: none;
+            margin: 2rem auto;
+            text-align: center;
+        }
+        .instructions {
+            background-color: #e9f5ff;
+            border-left: 4px solid #2575fc;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 0 4px 4px 0;
+        }
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            overflow: hidden;
+        }
+        .video-wrapper video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background-color: #000;
+        }
+        .file-info {
+            background-color: #f8f9fa;
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+        .btn-download {
+            margin-top: 0.5rem;
+        }
+        .stats-panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-left: 4px solid #6a11cb;
+        }
+        .stat-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .stat-icon {
+            margin-right: 10px;
+            color: #2575fc;
+            width: 24px;
+            text-align: center;
+        }
+        .stat-label {
+            font-weight: bold;
+            min-width: 100px;
+        }
+        .stat-value {
+            color: #495057;
+        }
+        @media (max-width: 768px) {
+            .comparison-container {
+                flex-direction: column;
+            }
+            .comparison-item {
+                min-width: 100%;
+            }
+            .stats-panel {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header text-center">
+        <div class="container">
+            <h1><i class="bi bi-camera-video"></i> 智能视觉检测系统</h1>
+            <p class="lead">基于YOLOv8的物体识别解决方案</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="instructions">
+            <h5><i class="bi bi-info-circle"></i> 使用说明</h5>
+            <ul class="mb-0">
+                <li>支持上传 JPG/PNG/GIF 图片或 MP4 视频</li>
+                <li>文件大小限制: 不超过20MB</li>
+                <li>系统将自动检测并标注图像中的物体</li>
+                <li>视频处理时间取决于长度和复杂度</li>
+            </ul>
+        </div>
+
+        <div class="upload-container text-center">
+            <h3 class="mb-4"><i class="bi bi-cloud-arrow-up"></i> 上传文件</h3>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <input class="form-control" type="file" id="fileInput" accept="image/*,video/mp4" required>
+                    <div class="form-text">支持格式: .jpg, .png, .gif, .mp4</div>
+                </div>
+                <div class="file-info alert alert-info" id="fileInfo" style="display: none;">
+                    <strong>已选择文件:</strong> <span id="fileName"></span> (<span id="fileSize"></span>)
+                </div>
+                <button type="submit" class="btn btn-primary btn-lg mt-3">
+                    <i class="bi bi-magic"></i> 开始检测
+                </button>
+            </form>
+        </div>
+
+        <div class="loading-spinner" id="loadingSpinner">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="mt-3 fs-5">正在处理您的文件，请稍候...</p>
+            <div class="progress mt-3" style="height: 8px; width: 80%; margin: 0 auto;">
+                <div id="loadingProgress" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="result-container" id="resultContainer">
+            <h3 class="text-center mb-4"><i class="bi bi-graph-up"></i> 检测结果</h3>
+
+            <div class="stats-panel" id="statsPanel" style="display: none;">
+                <h5><i class="bi bi-speedometer2"></i> 性能统计</h5>
+                <div class="stat-item">
+                    <span class="stat-icon"><i class="bi bi-clock-history"></i></span>
+                    <span class="stat-label">检测用时:</span>
+                    <span class="stat-value" id="detectionTime">-</span>
+                </div>
+                <div class="stat-item" id="fpsContainer" style="display: none;">
+                    <span class="stat-icon"><i class="bi bi-lightning-charge"></i></span>
+                    <span class="stat-label">处理速度:</span>
+                    <span class="stat-value" id="processingFPS">-</span>
+                </div>
+                <div class="stat-item" id="frameContainer" style="display: none;">
+                    <span class="stat-icon"><i class="bi bi-film"></i></span>
+                    <span class="stat-label">处理帧数:</span>
+                    <span class="stat-value" id="totalFrames">-</span>
+                </div>
+            </div>
+
+            <div id="mediaDisplay"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 文件选择后显示文件信息
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const fileInfo = document.getElementById('fileInfo');
+                const fileName = document.getElementById('fileName');
+                const fileSize = document.getElementById('fileSize');
+
+                fileName.textContent = file.name;
+                fileSize.textContent = formatFileSize(file.size);
+                fileInfo.style.display = 'block';
+
+                // 重置结果区域
+                document.getElementById('resultContainer').style.display = 'none';
+                document.getElementById('statsPanel').style.display = 'none';
+            }
+        });
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 表单提交处理
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showAlert('请先选择文件', 'danger');
+                return;
+            }
+
+            // 检查文件大小 (限制20MB)
+            if (file.size > 20 * 1024 * 1024) {
+                showAlert('文件大小超过20MB限制', 'danger');
+                return;
+            }
+
+            // 显示加载动画
+            document.getElementById('loadingSpinner').style.display = 'block';
+            document.getElementById('resultContainer').style.display = 'none';
+            document.getElementById('statsPanel').style.display = 'none';
+
+            // 模拟进度条更新
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 5;
+                if (progress > 90) clearInterval(progressInterval);
+                document.getElementById('loadingProgress').style.width = `${progress}%`;
+            }, 300);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                clearInterval(progressInterval);
+                document.getElementById('loadingProgress').style.width = '100%';
+
+                if (!response.ok) {
+                    throw new Error(`服务器错误! 状态码: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+
+                // 隐藏加载动画
+                setTimeout(() => {
+                    document.getElementById('loadingSpinner').style.display = 'none';
+                    showResults(result);
+                }, 500);
+
+            } catch (error) {
+                clearInterval(progressInterval);
+                document.getElementById('loadingSpinner').style.display = 'none';
+                showAlert('处理失败: ' + error.message, 'danger');
+                console.error('处理错误:', error);
+            }
+        });
+
+        // 显示结果
+        function showResults(result) {
+            const mediaDisplay = document.getElementById('mediaDisplay');
+            mediaDisplay.innerHTML = '';
+
+            const isVideo = result.is_video || result.detected.endsWith('.mp4');
+
+            // 显示统计面板
+            const statsPanel = document.getElementById('statsPanel');
+            statsPanel.style.display = 'block';
+
+            // 设置检测时间
+            document.getElementById('detectionTime').textContent = result.detected_time;
+
+            // 如果是视频，显示额外信息
+            if (isVideo && result.frame_count) {
+                document.getElementById('fpsContainer').style.display = 'flex';
+                document.getElementById('frameContainer').style.display = 'flex';
+
+                const timeInSeconds = parseFloat(result.detected_time.replace('s', ''));
+                const fps = (result.frame_count / timeInSeconds).toFixed(1);
+
+                document.getElementById('processingFPS').textContent = `${fps} 帧/秒`;
+                document.getElementById('totalFrames').textContent = `${result.frame_count} 帧`;
+            } else {
+                document.getElementById('fpsContainer').style.display = 'none';
+                document.getElementById('frameContainer').style.display = 'none';
+            }
+
+            // 创建对比容器
+            const comparisonContainer = document.createElement('div');
+            comparisonContainer.className = 'comparison-container';
+
+            // 原始文件展示
+            const originalItem = document.createElement('div');
+            originalItem.className = 'comparison-item';
+            originalItem.innerHTML = `
+                <div class="media-container">
+                    <div class="media-title">
+                        <span>原始${isVideo ? '视频' : '图片'}</span>
+                        <a href="${result.original}" download class="btn btn-sm btn-outline-secondary btn-download">
+                            <i class="bi bi-download"></i> 下载
+                        </a>
+                    </div>
+                    <div class="media-content">
+                        ${isVideo ? `
+                            <div class="video-wrapper">
+                                <video controls playsinline preload="auto">
+                                    <source src="${result.original}" type="video/mp4">
+                                    您的浏览器不支持视频播放
+                                </video>
+                            </div>
+                        ` : `
+                            <img src="${result.original}" class="img-fluid rounded" alt="原始文件" loading="lazy">
+                        `}
+                        <div class="file-info mt-2">
+                            <i class="bi bi-link-45deg"></i> <a href="${result.original}" target="_blank">查看原始文件</a>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 检测结果展示
+            const detectedItem = document.createElement('div');
+            detectedItem.className = 'comparison-item';
+            detectedItem.innerHTML = `
+                <div class="media-container">
+                    <div class="media-title">
+                        <span>检测结果</span>
+                        <a href="${result.detected}" download class="btn btn-sm btn-outline-primary btn-download">
+                            <i class="bi bi-download"></i> 下载结果
+                        </a>
+                    </div>
+                    <div class="media-content">
+                        ${isVideo ? `
+                            <div class="video-wrapper">
+                                <video controls playsinline preload="auto">
+                                    <source src="${result.detected}" type="video/mp4">
+                                    您的浏览器不支持视频播放
+                                </video>
+                            </div>
+                        ` : `
+                            <img src="${result.detected}" class="img-fluid rounded" alt="检测结果" loading="lazy">
+                        `}
+                        <div class="file-info mt-2">
+                            <i class="bi bi-link-45deg"></i> <a href="${result.detected}" target="_blank">查看检测结果</a>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            comparisonContainer.appendChild(originalItem);
+            comparisonContainer.appendChild(detectedItem);
+            mediaDisplay.appendChild(comparisonContainer);
+
+            document.getElementById('resultContainer').style.display = 'block';
+
+            // 添加视频错误监听
+            if (isVideo) {
+                setTimeout(() => {
+                    const videos = document.querySelectorAll('video');
+                    videos.forEach(video => {
+                        video.addEventListener('error', function() {
+                            const parent = this.closest('.media-container');
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'alert alert-danger mt-2';
+                            errorDiv.innerHTML = `
+                                <i class="bi bi-exclamation-triangle"></i> 视频加载失败，建议:
+                                <ul class="mt-2 mb-1">
+                                    <li>尝试刷新页面</li>
+                                    <li>使用Chrome或Firefox浏览器</li>
+                                    <li><a href="${this.querySelector('source').src}" download class="alert-link">下载视频</a>后本地播放</li>
+                                </ul>
+                            `;
+                            parent.appendChild(errorDiv);
+                        });
+                    });
+                }, 500);
+            }
+        }
+
+        // 显示提示信息
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} mt-3 alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                <i class="bi ${type === 'danger' ? 'bi-exclamation-triangle' : 'bi-info-circle'}"></i> ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+
+            const container = document.querySelector('.upload-container');
+            const existingAlert = container.querySelector('.alert');
+            if (existingAlert) {
+                existingAlert.remove();
+            }
+
+            container.appendChild(alertDiv);
+
+            // 5秒后自动消失
+            setTimeout(() => {
+                const bsAlert = new bootstrap.Alert(alertDiv);
+                bsAlert.close();
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
